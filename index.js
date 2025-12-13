@@ -4,6 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { MongoClient } from "mongodb";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
 dotenv.config();
 
@@ -62,10 +63,93 @@ function verifyToken(req, res, next) {
       return res.status(403).json({ message: "Invalid token" });
     }
 
-    req.user = decoded; // { email, role }
+    req.user = decoded;
     next();
   });
 }
+
+// --------------------------------
+// AUTH ROUTES
+// --------------------------------
+app.post("/register", async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const cleanEmail = email.toLowerCase();
+    const existing = await Users().findOne({ email: cleanEmail });
+
+    if (existing) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = {
+      name,
+      email: cleanEmail,
+      password: hashedPassword,
+      role: "member",
+      createdAt: new Date(),
+    };
+
+    await Users().insertOne(newUser);
+
+    res.json({ success: true, message: "Registration successful" });
+  } catch (error) {
+    console.error("REGISTER ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const cleanEmail = email.toLowerCase();
+    const user = await Users().findOne({ email: cleanEmail });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    const token = jwt.sign(
+      { email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.post("/logout", (req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: false,
+    sameSite: "lax",
+  });
+
+  res.json({ success: true });
+});
 
 // --------------------------------
 // Root route
