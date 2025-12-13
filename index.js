@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { MongoClient } from "mongodb";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
@@ -25,8 +26,6 @@ app.use(cookieParser());
 // --------------------------------
 // MongoDB Connection
 // --------------------------------
-console.log("DB URI Loaded:", process.env.MONGO_URI);
-
 const client = new MongoClient(process.env.MONGO_URI);
 let db;
 
@@ -39,7 +38,6 @@ async function connectDB() {
     console.error("❌ MongoDB Connection Error:", error);
   }
 }
-
 connectDB();
 
 // --------------------------------
@@ -48,6 +46,26 @@ connectDB();
 const Users = () => db.collection("users");
 const Clubs = () => db.collection("clubs");
 const Memberships = () => db.collection("memberships");
+
+// --------------------------------
+// JWT Middleware
+// --------------------------------
+function verifyToken(req, res, next) {
+  const token = req.cookies.token;
+
+  if (!token) {
+    return res.status(401).json({ message: "No token found" });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: "Invalid token" });
+    }
+
+    req.user = decoded; // { email, role }
+    next();
+  });
+}
 
 // --------------------------------
 // Root route
