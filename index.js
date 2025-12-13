@@ -1,72 +1,126 @@
 // ===============================
-// USER ROLE FETCH
+// MANAGER — Create Club
 // ===============================
-app.get("/users/role/:email", verifyToken, async (req, res) => {
+app.post("/manager/clubs", verifyToken, async (req, res) => {
   try {
-    const email = req.params.email.toLowerCase();
-
-    if (email !== req.user.email) {
-      return res.status(403).json({ message: "Forbidden" });
+    if (req.user.role !== "manager") {
+      return res.status(403).json({ message: "Manager only" });
     }
 
-    const user = await Users().findOne({ email });
-    res.json({ role: user?.role || "member" });
+    const {
+      clubName,
+      description,
+      category,
+      location,
+      bannerImage,
+      membershipFee,
+    } = req.body;
+
+    if (!clubName || !description || !category || !location || !bannerImage) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const newClub = {
+      clubName,
+      description,
+      category,
+      location,
+      bannerImage,
+      membershipFee: Number(membershipFee) || 0,
+      status: "pending",
+      managerEmail: req.user.email,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await Clubs().insertOne(newClub);
+
+    res.json({
+      success: true,
+      message: "Club created, waiting approval",
+      newClub,
+    });
   } catch (error) {
-    console.error("ROLE FETCH ERROR:", error);
+    console.error("CREATE CLUB ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
 // ===============================
-// ADMIN — Manage Users
+// MANAGER — Get Own Clubs
 // ===============================
-app.get("/admin/users", verifyToken, async (req, res) => {
+app.get("/manager/clubs", verifyToken, async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Admin only" });
+    if (req.user.role !== "manager") {
+      return res.status(403).json({ message: "Manager only" });
     }
 
-    const users = await Users().find().toArray();
-    res.json(users);
+    const clubs = await Clubs()
+      .find({ managerEmail: req.user.email })
+      .toArray();
+
+    res.json(clubs);
   } catch (error) {
-    console.error("ADMIN USERS ERROR:", error);
+    console.error("MANAGER CLUBS ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-app.patch("/admin/users/role/:email", verifyToken, async (req, res) => {
+// ===============================
+// ADMIN — View All Clubs
+// ===============================
+app.get("/admin/clubs", verifyToken, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
       return res.status(403).json({ message: "Admin only" });
     }
 
-    const email = req.params.email.toLowerCase();
-    const { role } = req.body;
+    const clubs = await Clubs().find().toArray();
+    res.json(clubs);
+  } catch (error) {
+    console.error("ADMIN CLUBS ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
-    await Users().updateOne(
-      { email },
-      { $set: { role } }
+// ===============================
+// ADMIN — Approve Club
+// ===============================
+app.patch("/admin/clubs/approve/:id", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Admin only" });
+    }
+
+    await Clubs().updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { status: "approved" } }
     );
 
-    res.json({ success: true, message: "Role updated" });
+    res.json({ success: true });
   } catch (error) {
-    console.error("ROLE UPDATE ERROR:", error);
+    console.error("APPROVE CLUB ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-app.delete("/admin/users/:email", verifyToken, async (req, res) => {
+// ===============================
+// ADMIN — Reject Club
+// ===============================
+app.patch("/admin/clubs/reject/:id", verifyToken, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
       return res.status(403).json({ message: "Admin only" });
     }
 
-    const email = req.params.email.toLowerCase();
-    await Users().deleteOne({ email });
+    await Clubs().updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { status: "rejected" } }
+    );
 
-    res.json({ success: true, message: "User deleted" });
+    res.json({ success: true });
   } catch (error) {
-    console.error("DELETE USER ERROR:", error);
+    console.error("REJECT CLUB ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
