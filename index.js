@@ -385,13 +385,36 @@ app.patch("/admin/clubs/reject/:id", verifyToken, async (req, res) => {
 // ===============================
 app.get("/clubs", async (req, res) => {
   try {
-    const clubs = await Clubs().find({ status: "approved" }).toArray();
+    const { search, category, sort } = req.query;
+
+    const query = { status: "approved" };
+
+    if (search) {
+      query.clubName = { $regex: search, $options: "i" };
+    }
+
+    if (category) {
+      query.category = category;
+    }
+
+    let sortOption = {};
+    if (sort === "newest") sortOption = { createdAt: -1 };
+    if (sort === "oldest") sortOption = { createdAt: 1 };
+    if (sort === "fee_high") sortOption = { membershipFee: -1 };
+    if (sort === "fee_low") sortOption = { membershipFee: 1 };
+
+    const clubs = await Clubs()
+      .find(query)
+      .sort(sortOption)
+      .toArray();
+
     res.json(clubs);
   } catch (error) {
     console.error("GET CLUBS ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
+
 //get club details with member count
 
 app.get("/clubs/:id", async (req, res) => {
@@ -411,6 +434,30 @@ app.get("/clubs/:id", async (req, res) => {
     res.json({ ...club, memberCount });
 
   } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+app.get("/member/events/available", verifyToken, async (req, res) => {
+  try {
+    const memberships = await Memberships()
+      .find({ userEmail: req.user.email })
+      .toArray();
+
+    if (!memberships.length) return res.json([]);
+
+    // 🔧 convert ObjectId → string
+    const clubIds = memberships.map(m => m.clubId.toString());
+
+    const events = await Events()
+      .find({ clubId: { $in: clubIds } })
+      .sort({ eventDate: 1 })
+      .toArray();
+
+    res.json(events);
+  } catch (err) {
+    console.error("MEMBER EVENTS ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -1350,7 +1397,96 @@ app.post("/events/checkout-success", verifyToken, async (req, res) => {
   }
 });
 
+// ADMIN — Dashboard Stats
+// ===============================
+app.get("/admin/stats", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Admin only" });
+    }
 
+    const [
+      totalUsers,
+      totalClubs,
+      totalEvents,
+      payments,
+    ] = await Promise.all([
+      Users().countDocuments(),
+      Clubs().countDocuments(),
+      Events().countDocuments(),
+      Payments().find().toArray(),
+    ]);
+
+    let clubRevenue = 0;
+    let eventRevenue = 0;
+
+    payments.forEach((p) => {
+      if (p.type === "club") clubRevenue += p.amount;
+      if (p.type === "event") eventRevenue += p.amount;
+    });
+
+    res.json({
+      totalUsers,
+      totalClubs,
+      totalEvents,
+      totalRevenue: clubRevenue + eventRevenue,
+      clubRevenue,
+      eventRevenue,
+    });
+  } catch (err) {
+    console.error("ADMIN STATS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ===============================
+// ⭐ MEMBER — My Payments
+// ===============================
+app.get("/member/payments", verifyToken, async (req, res) => {
+  try {
+    const payments = await Payments()
+      .find({ userEmail: req.user.email })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    if (payments.length === 0) {
+      return res.json([]);
+    }
+
+    // collect clubIds
+    const clubIds = [
+      ...new Set(
+        payments
+          .filter(p => p.clubId)
+          .map(p => new ObjectId(p.clubId))
+      )
+    ];
+
+    // fetch clubs
+    const clubs = await Clubs()
+      .find({ _id: { $in: clubIds } })
+      .toArray();
+
+    // map club names
+    const clubMap = {};
+    clubs.forEach(c => {
+      clubMap[c._id.toString()] = c.clubName;
+    });
+
+    // attach clubName
+    const result = payments.map(p => ({
+      ...p,
+      clubName: p.clubId
+        ? clubMap[p.clubId.toString()] || "Unknown Club"
+        : "—",
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error("MEMBER PAYMENTS ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // ===============================
 // START SERVER
