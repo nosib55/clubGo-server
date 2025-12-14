@@ -464,7 +464,7 @@ app.get("/member/events/available", verifyToken, async (req, res) => {
 
 
 
-// ===============================
+
 // ⭐ FEATURED CLUBS
 // ===============================
 app.get("/featured-clubs", async (req, res) => {
