@@ -81,7 +81,7 @@ function verifyToken(req, res, next) {
 // ROOT ROUTE
 // --------------------------------
 app.get("/", (req, res) => {
-  res.send("ClubSphere Backend Running (Stripe Version)");
+  res.send("ClubGo Backend Running ");
 });
 
 // ===============================
