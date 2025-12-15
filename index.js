@@ -15,11 +15,10 @@ const app = express();
 // --------------------------------
 // Config
 // --------------------------------
-const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+const CLIENT_URL = process.env.CLIENT_URL ||  "http://localhost:5173";
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = new Stripe(stripeSecret);
 
-// --------------------------------
 // Middleware
 // --------------------------------
 app.use(express.json());
