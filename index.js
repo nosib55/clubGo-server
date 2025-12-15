@@ -41,7 +41,7 @@ let db;
 
 async function connectDB() {
   try {
-    await client.connect();
+    // await client.connect();
     db = client.db("clubsphere");
     console.log("🔥 MongoDB Connected Successfully");
   } catch (err) {
