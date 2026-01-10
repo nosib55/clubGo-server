@@ -21,14 +21,32 @@ const stripe = new Stripe(stripeSecret);
 
 // Middleware
 // --------------------------------
+// Middleware
+// --------------------------------
 app.use(express.json());
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://club-go.netlify.app"
+];
+
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS not allowed"));
+      }
+    },
     credentials: true,
   })
 );
+
 app.use(cookieParser());
+
 
 // --------------------------------
 // MongoDB Connection
